@@ -22,6 +22,10 @@ class IntentParser:
                 result[normalize_text(str(alias))] = key
         return result
 
+    @staticmethod
+    def normalize_alias(value: str) -> str:
+        return normalize_text(value)
+
     def parse(self, text: str) -> Command:
         normalized = normalize_text(text)
         base = {"original_text": text}

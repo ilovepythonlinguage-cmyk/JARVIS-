@@ -13,3 +13,10 @@ log_level: INFO
 vosk_model_path: models/vosk-model-small-pt-0.3
 audio_device: null
 confirmation_timeout: 10
+ai:
+  enabled: true
+  provider: ollama
+  model: llama3.2:1b
+  base_url: http://localhost:11434
+  timeout_seconds: 15
+  max_history: 6
