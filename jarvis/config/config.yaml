@@ -1,0 +1,15 @@
+hotkey: F8
+language: pt-BR
+tts_enabled: true
+start_beep: true
+stop_beep: true
+silence_timeout: 1.5
+max_recording_seconds: 15
+sample_rate: 16000
+block_size: 4000
+silence_threshold: 500
+browser: brave-browser
+log_level: INFO
+vosk_model_path: models/vosk-model-small-pt-0.3
+audio_device: null
+confirmation_timeout: 10
