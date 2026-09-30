@@ -35,4 +35,11 @@ class ActionRegistry:
         handler = self._handlers.get(command.intent)
         return handler(command, context) if handler else ActionResult(False, "Não entendi o comando.")
 
+    def supports(self, intent: Intent) -> bool:
+        return intent in self._handlers
+
+    @property
+    def action_names(self) -> tuple[str, ...]:
+        return tuple(intent.value for intent in self._handlers)
+
 registry = ActionRegistry()

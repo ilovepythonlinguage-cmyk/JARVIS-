@@ -1,13 +1,13 @@
 # Jarvis — assistente pessoal por voz para Linux Mint
 
-Jarvis é um assistente **local, sem interface gráfica e orientado a privacidade**. Em uma sessão Cinnamon/X11, ele permanece bloqueado à espera da hotkey (F8 por padrão); somente depois do toque abre o microfone, reconhece uma frase com Vosk, fecha a captura e executa uma ação previamente permitida. Não há escuta contínua, áudio salvo ou execução arbitrária de shell.
+Jarvis é um assistente **local, sem interface gráfica e orientado a privacidade**. Em uma sessão Cinnamon/X11, ele permanece bloqueado à espera da hotkey (F8 por padrão); somente depois do toque abre o microfone, reconhece uma frase com Vosk, fecha a captura e executa uma ação previamente permitida. O parser determinístico atende comandos diretos sem custo de IA; somente frases não reconhecidas seguem para o Ollama local com `llama3.2:1b`. Não há escuta contínua, áudio salvo, API paga ou execução arbitrária de shell.
 
 > O modo texto funciona em qualquer terminal. Voz, hotkey e ações de desktop precisam ser testadas na sessão gráfica real do Linux Mint — contêineres e SSH normalmente não têm microfone, servidor X ou sessão de áudio.
 
 ## Arquitetura
 
 ```text
-main.py                         entrada, --text e --debug
+main.py                         entrada, --text, --doctor e --debug
 jarvis/config/*.yaml            preferências e catálogos editáveis
 jarvis/configuration.py         leitura tipada de YAML
 jarvis/core/intent_parser.py    fala normalizada -> Command/Intent
@@ -15,13 +15,13 @@ jarvis/core/assistant.py        ciclo, resposta e confirmação
 jarvis/core/hotkey.py           listener global X11 sob demanda
 jarvis/actions/                 registry e ações permitidas
 jarvis/speech/                  interfaces STT/TTS e Vosk/espeak
-jarvis/ai/base.py               interface opcional para IA futura
+jarvis/ai/                      interface de IA e provedor Ollama local
 jarvis/utils/                   texto, áudio e logging
 tests/                          parser, normalização e segurança
 systemd/jarvis.service          template de serviço do usuário
 ```
 
-O `IntentParser` não executa nada: produz um `Command` tipado. O `ActionRegistry` associa somente intents conhecidas a handlers. Os handlers recebem dados já estruturados e chamam processos com listas de argumentos, sem `shell=True`. Desligar e reiniciar usam correspondência exata e ficam pendentes até uma segunda frase explícita (“sim”); “não” e “cancelar” descartam a operação.
+O `IntentParser` não executa nada: produz um `Command` tipado. Se ele retornar `unknown`, o `OllamaProvider` pode classificar a frase em resposta ou action estruturada. O resultado JSON é validado contra o mesmo `ActionRegistry` e os mesmos aliases antes da execução. O `ActionRegistry` associa somente intents conhecidas a handlers. Os handlers recebem dados já estruturados e chamam processos com listas de argumentos, sem `shell=True`. Desligar e reiniciar usam correspondência exata e ficam pendentes até uma segunda frase explícita (“sim”); “não” e “cancelar” descartam a operação.
 
 ## Requisitos
 
@@ -50,6 +50,21 @@ sudo apt update
 sudo apt install python3-venv libportaudio2 espeak-ng playerctl \
   pulseaudio-utils xdg-utils cinnamon-screensaver alsa-utils
 ```
+
+### IA local com Ollama
+
+Instale o Ollama para Linux conforme as instruções oficiais e baixe conscientemente o modelo leve (o instalador do Jarvis nunca faz esse download automaticamente):
+
+```bash
+curl -fsSL https://ollama.com/install.sh | sh
+ollama pull llama3.2:1b
+ollama list
+python main.py --doctor
+python main.py --text
+python main.py
+```
+
+Se o Ollama estiver desligado, ausente, expirar ou não tiver o modelo, o Jarvis avisa sem encerrar. Comandos locais como “abre o vscode”, “volume 50” e “que horas são” continuam funcionando normalmente.
 
 ### Microfone
 
@@ -90,6 +105,13 @@ log_level: INFO
 vosk_model_path: models/vosk-model-small-pt-0.3
 audio_device: null
 confirmation_timeout: 10
+ai:
+  enabled: true
+  provider: ollama
+  model: llama3.2:1b
+  base_url: http://localhost:11434
+  timeout_seconds: 15
+  max_history: 6
 ```
 
 Para trocar a tecla, edite `hotkey` (por exemplo, `F9`) e reinicie. Teclas especiais suportadas pelo `pynput` são usadas pelo nome. Para desligar a fala e manter logs, use `tts_enabled: false`. Se Brave não existir, URLs usam `xdg-open` e o navegador padrão.
@@ -102,7 +124,7 @@ Teste primeiro sem tocar no desktop:
 .venv/bin/python main.py --text
 ```
 
-Digite comandos após `>` e use `sair` para encerrar. Atenção: o modo texto interpreta **e executa** ações válidas, exatamente como a voz. Desligamento/reinício ainda exigem confirmação.
+Digite comandos após `>` e use `sair` para encerrar. Use `python main.py --doctor` para consultar configuração, executável, API e modelo sem fazer downloads. Atenção: o modo texto interpreta **e executa** ações válidas, exatamente como a voz. Desligamento/reinício ainda exigem confirmação.
 
 Na sessão gráfica:
 
@@ -117,7 +139,7 @@ Pressione F8 uma vez, aguarde o tom, fale e pare. Após cerca de 1,5 s de silên
 
 | Categoria | Exemplos |
 |---|---|
-| Aplicativos | “abre o vscode”, “abra o Brave”, “abre o terminal” |
+| Aplicativos | “abre o vscode”, “po, abre o vs code aí”, “mano abre o Brave pra mim” |
 | Sites | “abre o YouTube”, “abre o GitHub”, “abre o ChatGPT” |
 | Busca | “pesquisa como criar classes em Python” |
 | YouTube | “pesquise no YouTube curso de Python” |
@@ -222,4 +244,4 @@ systemctl --user restart jarvis.service
 
 ## Privacidade e limites
 
-O áudio permanece apenas nos buffers de memória de curta duração e não é escrito em disco. Vosk funciona offline. TTS e comandos também são locais. O projeto não inclui deleção, scripts por voz, encerramento de processos nem terminal arbitrário. A interface `AIProvider` está vazia de propósito: nenhuma chave, conta ou API externa é necessária para os comandos básicos.
+O áudio permanece apenas nos buffers de memória de curta duração e não é escrito em disco. Vosk funciona offline. TTS e comandos também são locais. O projeto não inclui deleção, scripts por voz, encerramento de processos nem terminal arbitrário. O histórico de conversa fica somente em RAM e conserva no máximo seis mensagens por padrão. Nenhuma chave, conta ou API externa é necessária.

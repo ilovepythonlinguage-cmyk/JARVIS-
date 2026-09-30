@@ -9,6 +9,15 @@ ROOT = Path(__file__).resolve().parent.parent
 CONFIG_DIR = Path(__file__).resolve().parent / "config"
 
 @dataclass(frozen=True)
+class AISettings:
+    enabled: bool = True
+    provider: str = "ollama"
+    model: str = "llama3.2:1b"
+    base_url: str = "http://localhost:11434"
+    timeout_seconds: float = 15
+    max_history: int = 6
+
+@dataclass(frozen=True)
 class Settings:
     hotkey: str = "F8"
     language: str = "pt-BR"
@@ -25,6 +34,7 @@ class Settings:
     vosk_model_path: str = "models/vosk-model-small-pt-0.3"
     audio_device: int | str | None = None
     confirmation_timeout: float = 10
+    ai: AISettings = AISettings()
 
     @property
     def model_path(self) -> Path:
@@ -48,4 +58,10 @@ def load_settings(path: Path | None = None) -> Settings:
     unknown = values.keys() - known.keys()
     if unknown:
         raise RuntimeError(f"Opções desconhecidas: {', '.join(sorted(unknown))}")
-    return Settings(**values)
+    ai_values = values.pop("ai", {})
+    if not isinstance(ai_values, dict):
+        raise RuntimeError("A opção ai deve conter um mapa YAML")
+    unknown_ai = ai_values.keys() - AISettings.__dataclass_fields__.keys()
+    if unknown_ai:
+        raise RuntimeError(f"Opções de IA desconhecidas: {', '.join(sorted(unknown_ai))}")
+    return Settings(**values, ai=AISettings(**ai_values))
