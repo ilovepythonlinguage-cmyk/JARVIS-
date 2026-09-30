@@ -6,7 +6,7 @@ import threading
 import time
 from jarvis import actions  # noqa: F401
 from jarvis.actions.base import ActionContext, ActionResult, registry
-from jarvis.ai.base import AIProvider, AIProviderError
+from jarvis.ai.base import AIProvider, AIProviderError, AIResponse
 from jarvis.core.intent_parser import IntentParser
 from jarvis.core.models import Command, Intent
 from jarvis.speech.base_stt import SpeechRecognizer
@@ -97,27 +97,51 @@ class Assistant:
             result = ActionResult(False, "Minha IA local está indisponível agora.")
             self._respond(result)
             return result
-        result, assistant_message = self._validate_ai_response(raw)
+        LOG.debug("AI raw response: %s", raw)
+        response = self._parse_ai_response(raw)
+        result, assistant_message = self._handle_ai_response(response)
         self._remember("user", text)
         self._remember("assistant", assistant_message)
         self._respond(result)
         return result
 
-    def _validate_ai_response(self, raw: str) -> tuple[ActionResult, str]:
+    @staticmethod
+    def _parse_ai_response(raw: str) -> AIResponse | None:
+        if not isinstance(raw, str) or not raw.strip():
+            return None
+        candidate = raw.strip()
+        fenced = re.fullmatch(r"```(?:json)?\s*(.*?)\s*```", candidate,
+                              flags=re.IGNORECASE | re.DOTALL)
+        if fenced:
+            candidate = fenced.group(1).strip()
         try:
-            data = json.loads(raw)
+            data = json.loads(candidate)
         except (json.JSONDecodeError, TypeError):
-            return ActionResult(False, "Não entendi o comando."), "Não entendi o comando."
+            return None
         if not isinstance(data, dict) or data.get("type") not in {"reply", "action"}:
-            return ActionResult(False, "Não entendi o comando."), "Não entendi o comando."
-        if data["type"] == "reply":
-            message = data.get("message")
+            return None
+        arguments = data.get("arguments")
+        return AIResponse(data["type"], data.get("message"), data.get("action"), arguments)
+
+    def _handle_ai_response(self, response: AIResponse | None) -> tuple[ActionResult, str]:
+        invalid = ActionResult(False, "Não entendi o comando.")
+        if response is None:
+            LOG.debug("AI parsed response: invalid")
+            return invalid, invalid.message
+        LOG.debug("AI parsed type: %s", response.type)
+        if response.type == "reply":
+            message = response.message
+            LOG.debug("AI message: %s", message)
             if isinstance(message, str) and message.strip() and len(message) <= 500:
-                return ActionResult(True, message.strip()), message.strip()
-            return ActionResult(False, "Não entendi o comando."), "Não entendi o comando."
-        action, arguments = data.get("action"), data.get("arguments")
+                message = message.strip()
+                return ActionResult(True, message), message
+            return invalid, invalid.message
+        action, arguments = response.action, response.arguments
+        LOG.debug("AI action: %s", action)
+        LOG.debug("AI arguments: %s", json.dumps(arguments, ensure_ascii=False)
+                  if isinstance(arguments, dict) else arguments)
         if not isinstance(action, str) or not isinstance(arguments, dict):
-            return ActionResult(False, "Não entendi o comando."), "Não entendi o comando."
+            return invalid, invalid.message
         try:
             intent = Intent(action)
         except ValueError:
