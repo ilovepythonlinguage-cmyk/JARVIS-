@@ -71,10 +71,33 @@ def test_natural_language_uses_validated_ai_action(phrase, answer, intent, slots
     assert (command.intent, command.slots) == (intent, slots)
 
 
-def test_conversational_reply():
-    assistant = make_assistant(FakeAI([payload("reply", message="Fala. O que manda?")]))
-    result = assistant.process_text("eae jarvis")
-    assert result.message == "Fala. O que manda?"
+@pytest.mark.parametrize("phrase", [
+    "eae jarvis",
+    "oi jarvis",
+    "tudo bem?",
+    "o que é python?",
+])
+def test_conversational_reply_is_returned_spoken_and_remembered(phrase):
+    ai = FakeAI([payload("reply", message="Fala. O que manda?")])
+    assistant = make_assistant(ai)
+
+    result = assistant.process_text(phrase)
+
+    assert result == ActionResult(True, "Fala. O que manda?")
+    assistant.tts.speak.assert_called_once_with("Fala. O que manda?")
+    assert assistant.history == [
+        {"role": "user", "content": phrase},
+        {"role": "assistant", "content": "Fala. O que manda?"},
+    ]
+
+
+def test_required_natural_action_keeps_working():
+    assistant = make_assistant(FakeAI([action("open_application", name="vscode")]))
+    with patch("jarvis.core.assistant.registry.execute", return_value=ActionResult(True, "ok")) as execute:
+        assistant.process_text("po abre o vs code ai")
+    command = execute.call_args.args[0]
+    assert command.intent is Intent.OPEN_APPLICATION
+    assert command.slots == {"target": "vscode"}
 
 
 @pytest.mark.parametrize("phrase", ["não abre o vscode", "po não abre o brave", "cancela", "cancelar"])
@@ -89,7 +112,8 @@ def test_negation_never_calls_ai_or_executes(phrase):
 
 
 @pytest.mark.parametrize("bad", [
-    "não é json", "", payload("action", action="run_shell", command="rm -rf /"),
+    "não é json", "", payload("reply"), payload("action", action="media_next"),
+    payload("other", message="oi"), payload("action", action="run_shell", command="rm -rf /"),
     action("open_application", target="inexistente"), action("set_volume", level=150),
 ])
 def test_invalid_ai_output_never_executes(bad):
@@ -97,6 +121,12 @@ def test_invalid_ai_output_never_executes(bad):
     with patch("jarvis.core.assistant.registry.execute") as execute:
         assistant.process_text("pedido natural")
     execute.assert_not_called()
+
+
+def test_json_inside_markdown_fence_is_accepted():
+    raw = '```json\n{"type":"reply","message":"Oi!"}\n```'
+    result = make_assistant(FakeAI([raw])).process_text("oi jarvis")
+    assert result == ActionResult(True, "Oi!")
 
 
 @pytest.mark.parametrize("failure", [AIProviderError("offline"), AIProviderError("timeout")])
