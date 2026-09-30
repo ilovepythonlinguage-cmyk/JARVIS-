@@ -1,0 +1,15 @@
+vscode:
+  command: [code]
+  aliases: [vscode, vs code, visual studio code, code]
+brave:
+  command: [brave-browser]
+  aliases: [brave, navegador]
+terminal:
+  command: [gnome-terminal]
+  aliases: [terminal, console]
+files:
+  command: [nemo]
+  aliases: [gerenciador de arquivos, arquivos, explorador de arquivos]
+calculator:
+  command: [gnome-calculator]
+  aliases: [calculadora]

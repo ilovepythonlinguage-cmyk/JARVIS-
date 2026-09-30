@@ -1,0 +1,12 @@
+downloads:
+  path: ~/Downloads
+  aliases: [downloads, download, minha pasta downloads]
+documents:
+  path: ~/Documents
+  aliases: [documentos, meus documentos]
+desktop:
+  path: ~/Desktop
+  aliases: [area de trabalho, minha area de trabalho, desktop]
+projects:
+  path: ~/Projects
+  aliases: [projetos, minha pasta de projetos, pasta de projetos]
